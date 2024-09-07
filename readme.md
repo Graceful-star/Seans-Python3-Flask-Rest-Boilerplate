@@ -1,131 +1,191 @@
-## Seans Python3 Flask Rest Boilerplate
+# Flask Application CI/CD with GitHub Actions and EC2
 
-### MIT License
-Rememeber, No guarantees, or even fit for a particular purpose.
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Prerequisites](#prerequisites)
+3. [Repository Setup](#repository-setup)
+4. [EC2 Instance Setup](#ec2-instance-setup)
+5. [GitHub Secrets Configuration](#github-secrets-configuration)
+6. [GitHub Actions Workflow](#github-actions-workflow)
+7. [Workflow Explanation](#workflow-explanation)
+8. [Troubleshooting](#troubleshooting)
+9. [Conclusion](#conclusion)
 
-This project will be updated slowly as required, so stay tuned.
+## Introduction
 
-If you have a suggestion, or you want to contribute some code, you are free to make a pull request.
+This documentation outlines the process of implementing Continuous Integration and Continuous Deployment (CI/CD) for a Flask application using GitHub Actions and an Amazon EC2 instance. The setup automates testing and deployment processes, ensuring code quality and streamlined releases.
 
-Your contributions will be visible since this project is public.
+## Prerequisites
 
-### To Setup and Start
-```bash
-pip install -r requirements.txt 
-python app.py
+- A GitHub account and repository containing your Flask application
+- An Amazon Web Services (AWS) account
+- Basic knowledge of Python, Flask, Git, and Linux commands
+
+## Repository Setup
+
+Ensure your repository has the following structure:
+
+```
+your-repo/
+├── .github/
+│   └── workflows/
+│       └── test.yaml
+├── tests/
+│   └── test_app.py
+├── app.py
+├── requirements.txt
+└── README.md
 ```
 
-### Get All Request Records
-```bash
-curl -X GET http://127.0.0.1:5000/request
+## EC2 Instance Setup
+
+1. Launch an Ubuntu EC2 instance in your AWS account.
+2. Configure security groups to allow inbound traffic on port 22 (SSH) and the port your Flask app uses (typically 5000).
+3. Create or use an existing key pair for SSH access.
+
+## GitHub Secrets Configuration
+
+Add the following secrets to your GitHub repository:
+
+1. `SSH_PRIVATE_KEY`: The content of your EC2 instance's private key file (.pem)
+2. `HOST`: Your EC2 instance's public IP or DNS
+3. `USERNAME`: The username for SSH access (usually 'ubuntu' for Ubuntu EC2 instances)
+4. `KNOWN_HOSTS`: Output of `ssh-keyscan -H YOUR_EC2_IP`
+
+To add secrets:
+1. Go to your GitHub repository
+2. Click "Settings" > "Secrets and variables" > "Actions"
+3. Click "New repository secret" for each secret
+
+## GitHub Actions Workflow
+
+Create a file named `test.yaml` in the `.github/workflows/` directory with the following content:
+
+```yaml
+name: Python Flask CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Run tests
+      run: |
+        python -m unittest discover tests
+
+  deploy-staging:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install SSH Key
+      uses: shimataro/ssh-key-action@v2
+      with:
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        known_hosts: ${{ secrets.KNOWN_HOSTS }}
+    
+    - name: Deploy to Staging
+      env:
+        HOST: ${{ secrets.HOST }}
+        USERNAME: ${{ secrets.USERNAME }}
+      run: |
+        ssh $USERNAME@$HOST << EOF
+          # Update system
+          sudo apt update && sudo apt upgrade -y
+
+          # Ensure required packages are installed
+          sudo apt install -y python3-venv
+
+          # Set up application directory
+          mkdir -p ~/flask-app
+          cd ~/flask-app
+
+          # Set up Git repository
+          git init
+          git remote add origin https://github.com/${{ github.repository }}.git
+          git fetch origin main
+          git reset --hard origin/main
+
+          # Set up Python virtual environment
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+
+          # Create systemd service file
+          sudo tee /etc/systemd/system/flask-app.service > /dev/null << EOT
+          [Unit]
+          Description=Flask App
+          After=network.target
+
+          [Service]
+          User=$USERNAME
+          WorkingDirectory=/home/$USERNAME/flask-app
+          ExecStart=/home/$USERNAME/flask-app/venv/bin/python app.py
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+          EOT
+
+          # Reload systemd, enable and restart the service
+          sudo systemctl daemon-reload
+          sudo systemctl enable flask-app.service
+          sudo systemctl restart flask-app.service
+
+          # Output service status for logging
+          sudo systemctl status flask-app.service
+        
 ```
 
-### Get One Request Record
-```bash
-curl -X GET http://127.0.0.1:5000/request/04cfc704-acb2-40af-a8d3-4611fab54ada
-```
+## Workflow Explanation
 
-### Add A New Record
-```bash
-curl -X POST http://127.0.0.1:5000/request -H 'Content-Type: application/json' -d '{"title":"Good & Bad Book", "email": "testuser3@test.com"}'
-```
+The workflow consists of two jobs:
 
-### Edit An Existing Record
-```bash
-curl -X PUT http://127.0.0.1:5000/request -H 'Content-Type: application/json' -d '{"title":"edited Good & Bad Book", "email": "testuser4@test.com"}'
-```
+1. **test**: Runs on every push and pull request.
+   - Sets up Python
+   - Installs dependencies
+   - Runs unit tests
 
-### Delete A Record
-```bash
-curl -X DELETE http://127.0.0.1:5000/request/04cfc704-acb2-40af-a8d3-4611fab54ada
-```
+2. **deploy-staging**: Runs only on pushes to the main branch, after tests pass.
+   - Sets up SSH access to the EC2 instance
+   - Updates the system
+   - Sets up the application directory
+   - Initializes and updates the Git repository
+   - Creates and activates a Python virtual environment
+   - Installs dependencies
+   - Creates a systemd service for the Flask app
+   - Starts the Flask app service
 
-## Unit Test with Nose
-```bash
-nosetests --verbosity=2
-```
+## Troubleshooting
 
-### Test Output
-```bash
-$ nosetests --verbose --nocapture
-app_test.test_get_all_requests ... ok
-app_test.test_get_individual_request ... ok
-app_test.test_get_individual_request_404 ... ok
-app_test.test_add_new_record ... ok
-app_test.test_get_new_record ... ok
-app_test.test_edit_new_record_title ... ok
-app_test.test_edit_new_record_email ... ok
-app_test.test_add_new_record_bad_email_format ... ok
-app_test.test_add_new_record_bad_title_key ... ok
-app_test.test_add_new_record_no_email_key ... ok
-app_test.test_add_new_record_no_title_key ... ok
-app_test.test_add_new_record_unicode_title ... ok
-app_test.test_add_new_record_no_payload ... ok
-app_test.test_delete_new_record ... ok
-app_test.test_delete_new_record_404 ... ok
+Common issues and solutions:
 
-------------------------------------------------------------------------------------
-Ran 15 tests in 15.285s
+1. **SSH Connection Fails**: Ensure the EC2 instance's security group allows inbound traffic on port 22 and that the SSH key is correctly set up in GitHub secrets.
 
-OK
-```
+2. **Python Package Installation Fails**: Check if `requirements.txt` is up-to-date and all packages are compatible with the Python version specified in the workflow.
 
+3. **Flask App Doesn't Start**: Verify that `app.py` is in the root directory of your repository and contains the necessary code to run the Flask app.
 
-## Swagger UI
-![swagger.png](swagger.png)
+4. **Changes Not Reflected After Deployment**: Ensure that the GitHub Actions workflow is triggered on pushes to the main branch and that the deployment job completes successfully.
 
-Hosted Locally
-http://127.0.0.1:5000/swagger/
+## Conclusion
 
-###
-Hosted via Heroku
-https://seans-python3-flask-rest.herokuapp.com/swagger/
+This CI/CD setup automates the testing and deployment of your Flask application, improving code quality and deployment efficiency. Regular monitoring of GitHub Actions logs and EC2 instance health is recommended to ensure smooth operation.
 
-###
-Hosted via Docker-compose and Nginx
-http://127.0.0.1/swagger/
-
-### Video Tutorial on adding Swagger-UI to this Python Flask API 
-[![Video Tutorial on adding Swagger-UI to Python Flask API](https://img.youtube.com/vi/iZ2Tah3IxQc/0.jpg)](https://youtu.be/iZ2Tah3IxQc)
-
-
-
-## Heroku
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](
-    https://heroku.com/deploy?template=https://github.com/Sean-Bradley/Seans-Python3-Flask-Rest-Boilerplate)
-
-You can also test this api on heroku.
-
-Live : https://seans-python3-flask-rest.herokuapp.com/request
-
-use the above curl commands replacing `http://127.0.0.1` with `https://seans-python3-flask-rest.herokuapp.com`
-
-### Video Tutorial Hosting this Python Flask Rest API on Heroku
-
-[![Video Tutorial Hosting this Python Flask Rest API on Heroku](https://img.youtube.com/vi/O_xEqtjh1io/0.jpg)](https://youtu.be/O_xEqtjh1io)
-
-# Design Patterns In Python
-
-To help support this project, please check out my book titled **Design Patterns In Python** 
-
-<img style="float:left; min-width:150px;" src="./img/design_patterns_in_python_book.jpg">
-
-&nbsp;<a href="https://www.amazon.com/dp/B08XLJ8Z2J"><img src="/img/flag_us.gif">&nbsp; https://www.amazon.com/dp/B08XLJ8Z2J</a><br/>
-&nbsp;<a href="https://www.amazon.co.uk/dp/B08XLJ8Z2J"><img src="/img/flag_uk.gif">&nbsp; https://www.amazon.co.uk/dp/B08XLJ8Z2J</a><br/>
-&nbsp;<a href="https://www.amazon.in/dp/B08Z282SBC"><img src="/img/flag_in.gif">&nbsp; https://www.amazon.in/dp/B08Z282SBC</a><br/>
-&nbsp;<a href="https://www.amazon.de/dp/B08XLJ8Z2J"><img src="/img/flag_de.gif">&nbsp; https://www.amazon.de/dp/B08XLJ8Z2J</a><br/>
-&nbsp;<a href="https://www.amazon.fr/dp/B08XLJ8Z2J"><img src="/img/flag_fr.gif">&nbsp; https://www.amazon.fr/dp/B08XLJ8Z2J</a><br/>
-&nbsp;<a href="https://www.amazon.es/dp/B08XLJ8Z2J"><img src="/img/flag_es.gif">&nbsp; https://www.amazon.es/dp/B08XLJ8Z2J</a><br/>
-&nbsp;<a href="https://www.amazon.it/dp/B08XLJ8Z2J"><img src="/img/flag_it.gif">&nbsp; https://www.amazon.it/dp/B08XLJ8Z2J</a><br/>
-&nbsp;<a href="https://www.amazon.co.jp/dp/B08XLJ8Z2J"><img src="/img/flag_jp.gif">&nbsp; https://www.amazon.co.jp/dp/B08XLJ8Z2J</a><br/>
-&nbsp;<a href="https://www.amazon.ca/dp/B08XLJ8Z2J"><img src="/img/flag_ca.gif">&nbsp; https://www.amazon.ca/dp/B08XLJ8Z2J</a><br/>
-&nbsp;<a href="https://www.amazon.com.au/dp/B08Z282SBC"><img src="/img/flag_au.gif">&nbsp; https://www.amazon.com.au/dp/B08Z282SBC</a>
-
-ASIN : B08XLJ8Z2J / B08Z282SBC
-
---- 
-
-Thanks
-
-Sean
-
+For further customization or advanced use cases, refer to the official documentation for [GitHub Actions](https://docs.github.com/en/actions) and [AWS EC2](https://docs.aws.amazon.com/ec2/).
