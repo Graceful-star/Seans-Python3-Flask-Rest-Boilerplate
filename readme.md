@@ -75,7 +75,7 @@ The workflow consists of two jobs:
    - Creates a systemd service for the Flask app
    - Starts the Flask app service
   
-     
+   **Note**: The pipeline gets triggered whenever a push or pull request is made to the main branch.  
 
 ## Troubleshooting
 
@@ -92,4 +92,5 @@ Common issues and solutions:
 ## Conclusion
 
 This CI/CD setup automates the testing and deployment of your Flask application, improving code quality and deployment efficiency. Regular monitoring of GitHub Actions logs and EC2 instance health is recommended to ensure smooth operation.
+For further customization or advanced use cases, refer to the official documentation for [GitHub Actions](https://docs.github.com/en/actions) and [AWS EC2](https://docs.aws.amazon.com/ec2/).
 
