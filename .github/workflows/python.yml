@@ -39,8 +39,13 @@ jobs:
     - name: Deploy to Staging
       run: |
         ssh ${{ secrets.USERNAME }}@${{ secrets.HOST }} << EOF
-          cd /home/ubuntu/python
-          git pull origin main
-          pip install -r requirements.txt
-          sudo systemctl restart your-flask-app.service
-        EOF
+         cd /home/ubuntu/python
+         git init
+         git remote add origin https://github.com/Graceful-star/Seans-Python3-Flask-Rest-Boilerplate.git
+         git fetch origin main
+         git reset --hard origin/main
+         python3 -m venv /home/ubuntu/your-app-venv
+         source /home/ubuntu/your-app-venv/bin/activate
+         /home/ubuntu/your-app-venv/bin/pip install -r requirements.txt
+         sudo systemctl restart your-flask-app.service
+         EOF
