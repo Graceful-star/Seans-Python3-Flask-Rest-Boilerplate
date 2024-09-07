@@ -2,9 +2,9 @@
 
 # on:
 #   push:
-#     branches: [ master ]
+#     branches: [ main ]
 #   pull_request:
-#     branches: [ master ]
+#     branches: [ main ]
 
 # jobs:
 #   test:
@@ -26,7 +26,7 @@
 #   deploy-staging:
 #     needs: test
 #     runs-on: ubuntu-latest
-#     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+#     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 #     steps:
 #     - uses: actions/checkout@v3
     
@@ -42,8 +42,8 @@
 #          cd /home/ubuntu/python
 #          git init
 #          git remote add origin https://github.com/Graceful-star/Seans-Python3-Flask-Rest-Boilerplate.git
-#          git fetch origin master
-#          git reset --hard origin/master
+#          git fetch origin main
+#          git reset --hard origin/main
 #          python3 -m venv /home/ubuntu/your-app-venv
 #          source /home/ubuntu/your-app-venv/bin/activate
 #          /home/ubuntu/your-app-venv/bin/pip install -r requirements.txt
@@ -55,9 +55,9 @@ name: Python Flask CI/CD
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   test:
@@ -79,7 +79,7 @@ jobs:
   deploy-staging:
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
     - uses: actions/checkout@v3
     
@@ -108,8 +108,8 @@ jobs:
           # Set up Git repository
           git init
           git remote add origin https://github.com/${{ github.repository }}.git
-          git fetch origin master
-          git reset --hard origin/master
+          git fetch origin main
+          git reset --hard origin/main
 
           # Set up Python virtual environment
           python3 -m venv venv
